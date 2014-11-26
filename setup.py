@@ -34,8 +34,8 @@ setup(name='sqlalchemy_netezza',
       zip_safe=False,
       entry_points={
          'sqlalchemy.dialects': [
-              'netezza = sqlalchemy_netezza.pyodbc:NetezzaDialect_pyodbc',
-              'netezza.pyodbc = sqlalchemy_netezza.pyodbc:NetezzaDialect_pyodbc',
+              'netezza = sqlalchemy_netezza:NetezzaODBC',
+              'netezza.pyodbc = sqlalchemy_netezza:NetezzaODBC',
               ]
         }
 )
