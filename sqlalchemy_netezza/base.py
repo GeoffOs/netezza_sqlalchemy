@@ -29,8 +29,8 @@ class NVARCHAR(sqltypes.NVARCHAR):
     def __init__(self, length=None, collation=None,
                  convert_unicode='force',
                  unicode_error=coerce_nvarchar):
-        super(NVARCHAR, self).__init__(
-            length,
+        super(NVARCHAR, self).__init__
+(            length,
             collation=collation,
             convert_unicode=convert_unicode,
             unicode_error='ignore')
@@ -160,7 +160,7 @@ oid_datatype_map = {
 }
 
 
-class NetezzaODBC(PyODBCConnector, PGDialect):
+class NetezzaDialect(PyODBCConnector, PGDialect):
     '''Attempts to reuse as much as possible from the postgresql and pyodbc
     dialects.
     '''
@@ -180,7 +180,7 @@ class NetezzaODBC(PyODBCConnector, PGDialect):
     description_encoding = None
 
     def initialize(self, connection):
-        super(NetezzaODBC, self).initialize(connection)
+        super(NetezzaDialect, self).initialize(connection)
         # PyODBC connector tries to set these to true...
         self.supports_unicode_statements = False
         self.supports_unicode_binds = False
@@ -318,7 +318,3 @@ def visit_create_table_as(element, compiler, **_kwargs):
         distribute=element.distribute_clause(),
     )
 
-
-registry.register("netezza", "netezza_dialect", "NetezzaODBC")
-registry.register(
-    "netezza.pyodbc", "netezza_dialect", "NetezzaODBC")
