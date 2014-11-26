@@ -1,3 +1,8 @@
+# access/base.py
+# Copyright (C) 2007-2012 the SQLAlchemy authors and contributors <see AUTHORS file>
+# Copyright (c) 2014 Josh Kuhn
+# Portions derived from https://github.com/deontologician/netezza_sqlalchemy
+#
 '''SQLAlchemy dialect for Netezza'''
 
 from sqlalchemy.dialects import registry
@@ -29,10 +34,8 @@ class NVARCHAR(sqltypes.NVARCHAR):
     def __init__(self, length=None, collation=None,
                  convert_unicode='force',
                  unicode_error=coerce_nvarchar):
-        super(NVARCHAR, self).__init__
-(            length,
-            #collation=collation,
-            collation='utf8',
+        super(NVARCHAR, self).__init__(
+            length,
             convert_unicode=convert_unicode,
             unicode_error='ignore')
 
@@ -59,6 +62,13 @@ ischema_names = {
     'oid': OID,
     'name': NAME,
 }
+
+class NetezzaExecutionContext(default.DefaultExecutionContext):
+
+    def get_lastrowid(self):
+        #self.cursor.execute("SELECT @@identity AS lastrowid")
+        #return self.cursor.fetchone()[0]
+        return 0
 
 
 class NetezzaTypeCompiler(PGTypeCompiler):
@@ -162,86 +172,91 @@ oid_datatype_map = {
 
 
 class NetezzaODBC(PyODBCConnector, PGDialect):
-'''Attempts to reuse as much as possible from the postgresql and pyodbc
-dialects.
-'''
-name = 'netezza'
-encoding = 'latin9'
-default_paramstyle = 'qmark'
-returns_unicode_strings = False
-supports_native_enum = False
-supports_sequences = True
-sequences_optional = False
-isolation_level = 'READ COMMITTED'
-max_identifier_length = 128
-type_compiler = NetezzaTypeCompiler
-statement_compiler = NetezzaCompiler
-ddl_compiler = NetezzaDDLCompiler
-description_encoding = None
-def initialize(self, connection):
-super(NetezzaODBC, self).initialize(connection)
-# PyODBC connector tries to set these to true...
-self.supports_unicode_statements = False
-self.supports_unicode_binds = False
-self.returns_unicode_strings = True
-self.convert_unicode = 'ignore'
-self.encoding = 'latin9'
-self.ischema_names.update(ischema_names)
-def has_table(self, connection, tablename, schema=None):
-'''Checks if the table exists in the current database'''
-# Have to filter by database name because the table could exist in
-# another database on the same machine
-dbname = connection.connection.getinfo(pyodbc.SQL_DATABASE_NAME)
-sql = ('select count(*) from _v_object_data where objname = ? '
-'and dbname = ?')
-result = connection.execute(sql, (str(tablename), dbname)).scalar()
-return bool(result)
-def get_table_names(self, connection, schema=None, **kw):
-result = connection.execute(
-"select tablename as name from _v_table "
-"where tablename not like '_t_%'")
-table_names = [r[0] for r in result]
-return table_names
-@reflection.cache
-def get_columns(self, connection, table_name, schema=None, **kw):
-SQL_COLS = """
-SELECT CAST(a.attname AS VARCHAR(128)) as name,
-a.atttypid as typeid,
-not a.attnotnull as nullable,
-a.attcolleng as length,
-a.format_type
-FROM _v_relation_column a
-WHERE a.name = :tablename
-ORDER BY a.attnum
-"""
-s = text(SQL_COLS,
-bindparams=[bindparam('tablename', type_=sqltypes.String)],
-typemap={'name': NAME,
-'typeid': sqltypes.Integer,
-'nullable': sqltypes.Boolean,
-'length': sqltypes.Integer,
-'format_type': sqltypes.String,
-})
-c = connection.execute(s, tablename=table_name)
-rows = c.fetchall()
-# format columns
-columns = []
-for name, typeid, nullable, length, format_type in rows:
-coltype_class, has_length = oid_datatype_map[typeid]
-if coltype_class is sqltypes.Numeric:
-precision, scale = re.match(
-r'numeric\((\d+),(\d+)\)', format_type).groups()
-coltype = coltype_class(int(precision), int(scale))
-elif has_length:
-coltype = coltype_class(length)
-else:
-coltype = coltype_class()
-columns.append({
-'name': name,
-'type': coltype,
-'nullable': nullable,
-})
-return columns
+    '''Attempts to reuse as much as possible from the postgresql and pyodbc
+    dialects.
+    '''
+
+    name = 'netezza'
+    encoding = 'latin9'
+    default_paramstyle = 'qmark'
+    returns_unicode_strings = False
+    supports_native_enum = False
+    supports_sequences = True
+    sequences_optional = False
+    isolation_level = 'READ COMMITTED'
+    max_identifier_length = 128
+    type_compiler = NetezzaTypeCompiler
+    statement_compiler = NetezzaCompiler
+    ddl_compiler = NetezzaDDLCompiler
+    description_encoding = None
+
+    def initialize(self, connection):
+        super(NetezzaODBC, self).initialize(connection)
+        # PyODBC connector tries to set these to true...
+        self.supports_unicode_statements = False
+        self.supports_unicode_binds = False
+        self.returns_unicode_strings = True
+        self.convert_unicode = 'ignore'
+        self.encoding = 'latin9'
+        self.ischema_names.update(ischema_names)
+
+    def has_table(self, connection, tablename, schema=None):
+        '''Checks if the table exists in the current database'''
+        # Have to filter by database name because the table could exist in
+        # another database on the same machine
+        dbname = connection.connection.getinfo(pyodbc.SQL_DATABASE_NAME)
+        sql = ('select count(*) from _v_object_data where objname = ? '
+               'and dbname = ?')
+        result = connection.execute(sql, (str(tablename), dbname)).scalar()
+        return bool(result)
+
+    def get_table_names(self, connection, schema=None, **kw):
+        result = connection.execute(
+            "select tablename as name from _v_table "
+            "where tablename not like '_t_%'")
+        table_names = [r[0] for r in result]
+        return table_names
+
+    @reflection.cache
+    def get_columns(self, connection, table_name, schema=None, **kw):
+        SQL_COLS = """
+            SELECT CAST(a.attname AS VARCHAR(128)) as name,
+                   a.atttypid as typeid,
+                   not a.attnotnull as nullable,
+                   a.attcolleng as length,
+                   a.format_type
+            FROM _v_relation_column a
+            WHERE a.name = :tablename
+            ORDER BY a.attnum
+        """
+        s = text(SQL_COLS,
+                 bindparams=[bindparam('tablename', type_=sqltypes.String)],
+                 typemap={'name': NAME,
+                          'typeid': sqltypes.Integer,
+                          'nullable': sqltypes.Boolean,
+                          'length': sqltypes.Integer,
+                          'format_type': sqltypes.String,
+                          })
+        c = connection.execute(s, tablename=table_name)
+        rows = c.fetchall()
+        # format columns
+        columns = []
+        for name, typeid, nullable, length, format_type in rows:
+            coltype_class, has_length = oid_datatype_map[typeid]
+            if coltype_class is sqltypes.Numeric:
+                precision, scale = re.match(
+                    r'numeric\((\d+),(\d+)\)', format_type).groups()
+                coltype = coltype_class(int(precision), int(scale))
+            elif has_length:
+                coltype = coltype_class(length)
+            else:
+                coltype = coltype_class()
+            columns.append({
+                'name': name,
+                'type': coltype,
+                'nullable': nullable,
+            })
+        return columns
 
     @reflection.cache
     def get_pk_constraint(self, connection, table_name, schema=None, **kw):
