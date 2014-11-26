@@ -31,7 +31,8 @@ class NVARCHAR(sqltypes.NVARCHAR):
                  unicode_error=coerce_nvarchar):
         super(NVARCHAR, self).__init__
 (            length,
-            collation=collation,
+            #collation=collation,
+            collation='utf8',
             convert_unicode=convert_unicode,
             unicode_error='ignore')
 
